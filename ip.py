@@ -11,11 +11,7 @@ from iputils import *
 
 class IP:
     def __init__(self, enlace):
-        """
-        Inicia a camada de rede. Recebe como argumento uma implementação
-        de camada de enlace capaz de localizar os next_hop (por exemplo,
-        Ethernet com ARP).
-        """
+
         self.callback = None
         self.enlace = enlace
         self.enlace.registrar_recebedor(self.__raw_recv)
@@ -25,54 +21,51 @@ class IP:
 
     def __raw_recv(self, datagrama):
         (
-            dscp,
+            codePoint,
             ecn,
             identificacao,
             flags,
-            frag_offset,
+            deslocamento,
             ttl,
             proto,
             endFonte,
             endDestino,
-            payload,
+            dadosCarregados,
         ) = read_ipv4_header(datagrama)
-        if endDestino == self.meu_endereco:
-            # atua como host
-            if proto == IPPROTO_TCP and self.callback:
-                self.callback(endFonte, endDestino, payload)
-        else:
+
+        if endDestino != self.meu_endereco:
             # atua como roteador
             next_hop = self._next_hop(endDestino)
 
-            # Recuperando cabeçalho para decrementar TTL
+            # Decrementar TTL
             (
-                dscp,
+                codePoint,
                 ecn,
                 identificacao,
                 flags,
-                frag_offset,
+                deslocamento,
                 ttl,
                 proto,
                 endFonte,
                 endDestino,
-                payload,
+                dadosCarregados,
             ) = read_ipv4_header(datagrama)
 
             if ttl == 1:
                 self._icmp_time_limit_exceeded(datagrama, endFonte)
-                return  # Descartando datagrama
+                return
             else:
                 ttl -= 1
 
-            # Refazendo cabeçalho com ttl decrementado
+            # Regerando o cabeçalho.
             hdr = (
                 struct.pack(
                     "!BBHHHBBH",
                     0x45,
-                    dscp | ecn,
-                    20 + len(payload),
+                    codePoint | ecn,
+                    20 + len(dadosCarregados),
                     identificacao,
-                    (flags << 13) | frag_offset,
+                    (flags << 13) | deslocamento,
                     ttl,
                     proto,
                     0,
@@ -81,17 +74,17 @@ class IP:
                 + str2addr(endDestino)
             )
 
-            # Corrigindo checksum
+            # Ajustando o checksum
             checksum = calc_checksum(hdr)
 
             hdr = (
                 struct.pack(
                     "!BBHHHBBH",
                     0x45,
-                    dscp | ecn,
-                    20 + len(payload),
+                    codePoint | ecn,
+                    20 + len(dadosCarregados),
                     identificacao,
-                    (flags << 13) | frag_offset,
+                    (flags << 13) | deslocamento,
                     ttl,
                     proto,
                     checksum,
@@ -100,9 +93,13 @@ class IP:
                 + str2addr(endDestino)
             )
 
-            datagrama = hdr + payload
+            datagrama = hdr + dadosCarregados
 
             self.enlace.enviar(datagrama, next_hop)
+        else:
+            # atua como host
+            if proto == IPPROTO_TCP and self.callback:
+                self.callback(endFonte, endDestino, dadosCarregados)
 
     def _next_hop(self, dest_addr):
 
@@ -117,10 +114,9 @@ class IP:
         return enderecoAnteriorEncontrado["next_hop"]
 
     def _addr_match(self, cidr, addr):
-        # Recortando os valores
         cidr_base, no_matching_bits = cidr.split("/", 1)
 
-        # Convertendo para inteiros e string de bits
+        # Converter os para bit strings.
         no_matching_bits = int(no_matching_bits)
         cidr_base = addr2bitstring(cidr_base)
         addr = addr2bitstring(addr)
@@ -138,34 +134,18 @@ class IP:
         self.enviar(payload, dst_addr, IPPROTO_ICMP)
 
     def definir_endereco_host(self, meu_endereco):
-        """
-        Define qual o endereço IPv4 (string no formato x.y.z.w) deste host.
-        Se recebermos datagramas destinados a outros endereços em vez desse,
-        atuaremos como roteador em vez de atuar como host.
-        """
+
         self.meu_endereco = meu_endereco
 
     def definir_tabela_encaminhamento(self, tabela):
-        """
-        Define a tabela de encaminhamento no formato
-        [(cidr0, next_hop0), (cidr1, next_hop1), ...]
 
-        Onde os CIDR são fornecidos no formato 'x.y.z.w/n', e os
-        next_hop são fornecidos no formato 'x.y.z.w'.
-        """
         self.tabela = tabela
 
     def registrar_recebedor(self, callback):
-        """
-        Registra uma função para ser chamada quando dados vierem da camada de rede
-        """
+
         self.callback = callback
 
     def enviar(self, segmento, dest_addr, proto=IPPROTO_TCP):
-        """
-        Envia segmento para dest_addr, onde dest_addr é um endereço IPv4
-        (string no formato x.y.z.w).
-        """
 
         next_hop = self._next_hop(dest_addr)
 
