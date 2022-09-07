@@ -6,6 +6,9 @@
 # Thiago Roberto Albino - RA: 790034.
 # Vitor de Almeida Recoaro - RA: 790035.
 
+import struct
+from grader.iputils import IPPROTO_ICMP, IPPROTO_TCP, read_ipv4_header
+from grader.tcputils import calc_checksum, str2addr
 from iputils import *
 
 
