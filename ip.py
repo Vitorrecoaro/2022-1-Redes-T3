@@ -1,5 +1,5 @@
 # 2022 - 1 - UFSCar - Departamento de Computação..
-# Trabalho de Redes 2 - Camada de transporte TCP.
+# Trabalho de Redes 3 - Camada de rede – IP
 # Alunos:.
 # Bruno Leandro Pereira - RA: 791067.
 # Bruno Luis Rodrigues Medri - RA: 790004.
